@@ -1,42 +1,51 @@
-name: Release - Docker Image CI
+name: Docker
 
 on:
-  release:
-    branches: [ master ]
-  
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+  push:
+    # Publish `master` as Docker `latest` image.
+    branches:
+      - master
+
+    # Publish `v1.2.3` tags as releases.
+    tags:
+      - v*
 
 env:
   IMAGE_NAME: 7dtd-server
-  
+
 jobs:
-  docker:
+  # Run tests.
+  # See also https://docs.docker.com/docker-hub/builds/automated-testing/
+  # test:
+  #   runs-on: ubuntu-latest
+
+  #   steps:
+  #     - uses: actions/checkout@v2
+
+  #     - name: Run tests
+  #       run: |
+  #         if [ -f docker-compose.test.yml ]; then
+  #           docker-compose --file docker-compose.test.yml build
+  #           docker-compose --file docker-compose.test.yml run sut
+  #         else
+  #           docker build . --file Dockerfile
+  #         fi
+
+  # Push image to GitHub Packages.
+  # See also https://docs.docker.com/docker-hub/builds/
+  build:
+    # Ensure test job passes before pushing image.
+    # needs: test
+
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
     steps:
-      - uses: actions/checkout@v1
-      - name: "call action"
-        id: last_release
-        uses: InsonusK/get-latest-release@v1.0.1
-        with:
-          myToken: ${{ github.token }}
-          exclude_types: "draft|prerelease"
-          view_top: 1
-#      - name: "Print result"
-#        run: |
-#          echo "id: ${{ steps.last_release.outputs.id }}"
-#          echo "name: ${{ steps.last_release.outputs.name }}"
-#          echo "tag_name: ${{ steps.last_release.outputs.tag_name }}"
-#          echo "created_at: ${{ steps.last_release.outputs.created_atd }}"
-#          echo "draft: ${{ steps.last_release.outputs.draft }}"
-#          echo "prerelease: ${{ steps.last_release.outputs.prerelease }}"
-      -
-        name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      
+      - uses: actions/checkout@v2
+
+      - name: Build image
+        run: docker build . --file Dockerfile --tag $IMAGE_NAME
+
       - name: Log into registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
 
@@ -55,3 +64,29 @@ jobs:
           echo VERSION=$VERSION
           docker tag $IMAGE_NAME $IMAGE_ID:$VERSION
           docker push $IMAGE_ID:$VERSION
+#   deploy:
+#     needs: build
+
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: deploy
+#         uses: garygrossgarten/github-action-ssh@release
+#         with:
+#           command: sudo /usr/bin/deploy_nwo_fivem
+#           host: ${{ secrets.DEPLOY_HOST }}
+#           port: ${{ secrets.DEPLOY_PORT }}
+#           username: ${{ secrets.DEPLOY_USER }}
+#           privateKey: ${{ secrets.DEPLOY_PRIVATE_KEY}}
+          
+  notifier:
+    needs: build
+    
+    runs-on: ubuntu-latest
+    
+    steps:
+    
+      - uses: binotaliu/action-discord-notifier@v1
+        with:
+          message-title: The project **7dtd-server** has been built.
+          webhook: https://discord.com/api/webhooks/809587146775199744/xCk76lYv4CyGFBDwPWnVop1y6e9mVeJQi2hasXcpdhrPPRXLcU41Ig-lIJ7GmR3cE4IL
